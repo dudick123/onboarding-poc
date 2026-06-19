@@ -1,0 +1,32 @@
+# Tenant onboarding request — committed to git for review before generation
+#
+# PHASE 1 (PR #41): App Gateway only.
+# PHASE 2 (PR #58): added build repo + config repo.
+# PHASE 3 (this commit, PR #67): adding ArgoCD Application + sync pipeline.
+tenant_slug: acme
+tenant_display_name: "ACME Industries"
+ado_project: platform-tenants
+resource_tier: large
+environments:
+- dev
+- staging
+- prod
+
+# What's been pushed to ADO so far. Updated by provision_tenant.py
+# after each successful run — do not hand-edit unless correcting a
+# record of what's actually live in ADO.
+provisioned_components:
+- app_gateway
+- argocd_app
+- build_repo
+- config_repo
+include_app_gateway: true
+include_build_repo: true
+include_config_repo: true
+include_argocd_app: true
+
+container_image: acr.azurecr.io/acme/orders-api
+key_vault_name: kv-acme-prod
+app_gateway_backend_fqdn: acme-internal.svc.cluster.local
+app_gateway_hostname: acme.platform.example.com
+argocd_target_revision: main

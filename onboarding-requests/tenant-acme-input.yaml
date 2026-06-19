@@ -1,0 +1,20 @@
+# Tenant onboarding request — committed to git for review before generation
+tenant_slug: acme
+tenant_display_name: "ACME Industries"
+ado_project: platform-tenants
+resource_tier: large
+environments:
+  - dev
+  - staging
+  - prod
+
+include_app_gateway: true
+include_build_repo: true
+include_config_repo: true
+include_argocd_app: true
+
+container_image: acr.azurecr.io/acme/orders-api
+key_vault_name: kv-acme-prod
+app_gateway_backend_fqdn: acme-internal.svc.cluster.local
+app_gateway_hostname: acme.platform.example.com
+argocd_target_revision: main

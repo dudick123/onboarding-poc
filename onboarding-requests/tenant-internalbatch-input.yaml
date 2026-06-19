@@ -1,0 +1,16 @@
+tenant_slug: internalbatch
+tenant_display_name: "Internal Batch Processing"
+ado_project: platform-tenants
+resource_tier: small
+environments:
+  - dev
+  - prod
+
+include_app_gateway: false
+include_build_repo: true
+include_config_repo: true
+include_argocd_app: true
+
+container_image: acr.azurecr.io/internalbatch/worker
+key_vault_name: kv-internalbatch-prod
+argocd_target_revision: main

@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: acme-dev
+
+bases:
+  - ../../base
+
+namePrefix: dev-
+
+replicas:
+  - name: acme
+    count: 1
+images:
+  - name: acr.azurecr.io/acme/orders-api
+    newTag: dev

@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: {{ tenant_slug }}-prod
+
+bases:
+  - ../../base
+
+namePrefix: prod-
+
+replicas:
+  - name: {{ tenant_slug }}
+    count: {% if "prod" == "prod" %}{{ "3" if resource_tier == "large" else "2" }}{% else %}1{% endif %}
+
+images:
+  - name: {{ container_image }}
+    newTag: prod
