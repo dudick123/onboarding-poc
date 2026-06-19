@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# uv
+.python-version
+
+# Local tenant generation experiments (real tenants live in their own ADO repos)
+tenant-*/
+!generated-tenants/
+
+# macOS
+.DS_Store

@@ -3,7 +3,7 @@ kind: Kustomization
 
 namespace: acme-dev
 
-bases:
+resources:
   - ../../base
 
 namePrefix: dev-

@@ -3,7 +3,7 @@ kind: Kustomization
 
 namespace: internalbatch-dev
 
-bases:
+resources:
   - ../../base
 
 namePrefix: dev-

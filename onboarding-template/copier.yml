@@ -9,6 +9,10 @@ _envops:
 tenant_slug:
   type: str
   help: Tenant short name (lowercase, used in namespace/repo/resource naming)
+  validator: >-
+    {% if not (tenant_slug | regex_search('^[a-z][a-z0-9-]{1,28}$')) %}
+    Must be 2–29 characters, lowercase letters/digits/hyphens only, starting with a letter.
+    {% endif %}
 
 tenant_display_name:
   type: str
@@ -18,6 +22,10 @@ ado_project:
   type: str
   help: Azure DevOps project this tenant's repos live in
   default: platform-tenants
+
+ado_org_name:
+  type: str
+  help: Azure DevOps organisation name (the subdomain in dev.azure.com/<org>)
 
 resource_tier:
   type: str
@@ -67,6 +75,17 @@ container_image:
   help: Container registry path (without tag) for this tenant's image
   when: "{{ include_build_repo or include_config_repo }}"
 
+runtime:
+  type: str
+  help: Container runtime for the build repo Dockerfile
+  choices:
+    - java
+    - python
+    - go
+    - node
+  default: java
+  when: "{{ include_build_repo }}"
+
 key_vault_name:
   type: str
   help: Azure Key Vault name backing this tenant's ExternalSecret
@@ -80,6 +99,11 @@ app_gateway_backend_fqdn:
 app_gateway_hostname:
   type: str
   help: Public hostname for the App Gateway listener (e.g. tenant.platform.example.com)
+  when: "{{ include_app_gateway }}"
+
+app_gateway_priority:
+  type: int
+  help: Routing rule priority on the shared Application Gateway (must be unique per gateway, 1–20000)
   when: "{{ include_app_gateway }}"
 
 argocd_target_revision:

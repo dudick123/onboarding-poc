@@ -3,14 +3,14 @@ kind: Kustomization
 
 namespace: internalbatch-prod
 
-bases:
+resources:
   - ../../base
 
 namePrefix: prod-
 
 replicas:
   - name: internalbatch
-    count: 2
+    count: 1
 images:
   - name: acr.azurecr.io/internalbatch/worker
     newTag: prod

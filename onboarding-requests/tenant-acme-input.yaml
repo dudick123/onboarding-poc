@@ -2,6 +2,7 @@
 tenant_slug: acme
 tenant_display_name: "ACME Industries"
 ado_project: platform-tenants
+ado_org_name: my-org
 resource_tier: large
 environments:
   - dev
@@ -14,7 +15,9 @@ include_config_repo: true
 include_argocd_app: true
 
 container_image: acr.azurecr.io/acme/orders-api
+runtime: java
 key_vault_name: kv-acme-prod
 app_gateway_backend_fqdn: acme-internal.svc.cluster.local
 app_gateway_hostname: acme.platform.example.com
+app_gateway_priority: 100
 argocd_target_revision: main

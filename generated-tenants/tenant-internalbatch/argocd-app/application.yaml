@@ -7,7 +7,7 @@ metadata:
 spec:
   project: internalbatch
   source:
-    repoURL: https://dev.azure.com/platform-tenants/_git/internalbatch-config
+    repoURL: https://dev.azure.com/my-org/platform-tenants/_git/internalbatch-config
     targetRevision: main
     path: internalbatch/overlays/prod
   destination:

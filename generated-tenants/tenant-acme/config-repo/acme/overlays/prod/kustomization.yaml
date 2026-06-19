@@ -3,7 +3,7 @@ kind: Kustomization
 
 namespace: acme-prod
 
-bases:
+resources:
   - ../../base
 
 namePrefix: prod-

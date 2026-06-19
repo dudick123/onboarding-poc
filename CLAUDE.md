@@ -50,7 +50,7 @@ uv run python provision_tenant.py \
 
 ### Template structure (`onboarding-template/`)
 
-- `copier.yml` — defines all questions; four boolean `include_*` toggles drive `_exclude` entries that entirely omit component directories when false. Component-specific follow-up questions use `when:` so they're never asked if the component is excluded.
+- `copier.yml` — defines all questions; four boolean `include_*` toggles drive `_exclude` entries that entirely omit component directories when false. Component-specific follow-up questions use `when:` so they're never asked if the component is excluded. Core identity questions: `tenant_slug` (validated against `^[a-z][a-z0-9-]{1,28}$`), `ado_project`, `ado_org_name`, `resource_tier`, `environments`. Notable conditional questions: `runtime` (java/python/go/node, when `include_build_repo`), `app_gateway_priority` (unique per shared gateway, when `include_app_gateway`).
 - `{{tenant_slug}}/` directory naming — Copier resolves the variable in directory names at render time
 - `provisioning.yaml.jinja` — rendered alongside components; maps each included component to its ADO repo name, pipeline YAML path, and approval environments. Guaranteed to stay in sync with the file tree because both come from the same render pass.
 

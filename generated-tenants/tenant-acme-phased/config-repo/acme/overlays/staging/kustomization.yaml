@@ -3,7 +3,7 @@ kind: Kustomization
 
 namespace: acme-staging
 
-bases:
+resources:
   - ../../base
 
 namePrefix: staging-

@@ -176,6 +176,39 @@ remaining comments.
    request file automatically; commit and push that as a follow-up commit
    (or fold into the same PR if running before merge).
 
+## Recovery: regenerating a lost tenant directory
+
+`copier update` requires `.copier-answers.yml` to exist in the local tenant
+directory — this file records which template version and answer set were used
+at generation time. It is intentionally excluded from the ADO repo push (it is
+Copier bookkeeping, not application code), which means it only lives in the
+local working directory where `copier copy` was originally run.
+
+If that directory is lost (machine wipe, new developer picking up an existing
+tenant), `copier update` cannot be run directly. The recovery procedure is:
+
+1. Re-run `copier copy` against the same request file and the current template:
+   ```bash
+   uv run copier copy onboarding-template <tenant-dir> \
+     --data-file onboarding-requests/<request>.yaml \
+     --defaults --quiet
+   ```
+2. This re-renders the tenant directory from scratch using the current template.
+   Because the request file is the source of truth for all answers, the output
+   will be consistent with what was originally generated (modulo any template
+   changes since then).
+3. Any hand-edits made inside the ADO repo since initial provisioning will not
+   be reflected in this fresh local copy. If those edits matter for future
+   `copier update` merges, pull the current ADO repo content into the local
+   directory before running `copier update`.
+
+The underlying design tension here is that `copier update` merges template
+changes against the last-generated state (recorded in `.copier-answers.yml`),
+but the ADO repo is the canonical home of the actual files. A production
+workflow would keep the generated tenant directory in a Git repo that is
+separate from but mirrors the ADO repo, so `.copier-answers.yml` is always
+recoverable from version control.
+
 ## Why not query ADO directly to infer what's already provisioned?
 
 Considered and rejected for this design. Querying ADO for "does a repo

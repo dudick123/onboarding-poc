@@ -7,3 +7,7 @@ variable "tenant_slug" {
 variable "resource_tier" {
   default = "large"
 }
+
+variable "app_gateway_priority" {
+  default = 100
+}

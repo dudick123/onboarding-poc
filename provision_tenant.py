@@ -203,11 +203,14 @@ def create_pipeline(
     from requests.auth import HTTPBasicAuth
 
     list_url = f"{ado_org}/{project}/_apis/pipelines"
+    # Use server-side name filter to avoid iterating a paginated list
     resp = requests.get(
-        list_url, params={"api-version": "7.1"}, auth=HTTPBasicAuth("", pat)
+        list_url,
+        params={"api-version": "7.1", "name": pipeline_name},
+        auth=HTTPBasicAuth("", pat),
     )
     resp.raise_for_status()
-    if any(p["name"] == pipeline_name for p in resp.json().get("value", [])):
+    if resp.json().get("count", 0) > 0:
         print(f"  ↩ Pipeline already exists: {pipeline_name}")
         return
 
@@ -444,6 +447,12 @@ def main():
     if not args.pat:
         print("ERROR: --pat is required (or set ADO_PAT env var)")
         sys.exit(1)
+
+    if "--pat" in sys.argv:
+        print(
+            "WARNING: --pat passed on command line — the token is visible in `ps aux`. "
+            "Set ADO_PAT as an environment variable instead."
+        )
 
     provision(args.tenant_dir, args.request_file, args.ado_org, args.pat)
 

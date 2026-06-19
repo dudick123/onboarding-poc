@@ -7,7 +7,7 @@ metadata:
 spec:
   project: {{ tenant_slug }}
   source:
-    repoURL: https://dev.azure.com/{{ ado_project }}/_git/{{ tenant_slug }}-config
+    repoURL: https://dev.azure.com/{{ ado_org_name }}/{{ ado_project }}/_git/{{ tenant_slug }}-config
     targetRevision: {{ argocd_target_revision }}
     path: {{ tenant_slug }}/overlays/prod
   destination:

@@ -23,5 +23,5 @@ resource "azurerm_application_gateway_request_routing_rule" "acme" {
   rule_type                  = "Basic"
   http_listener_name         = azurerm_application_gateway_listener.acme.name
   backend_address_pool_name  = azurerm_application_gateway_backend_address_pool.acme.name
-  priority                   = 100
+  priority                   = var.app_gateway_priority
 }
