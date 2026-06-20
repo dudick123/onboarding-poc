@@ -103,6 +103,37 @@ provisioned components back into that field when done. See
 `docs/PROVISIONING.md` for PAT scopes, expected output, and what the
 script does not yet handle.
 
+## Adding apps to a tenant
+
+Each app in the `apps` list gets three discrete ADO repos:
+`{name}` (build), `{name}-k8s-manifests` (Kustomize config),
+`{name}-argocd` (ArgoCD Application + sync pipeline).
+Multiple apps and multiple instances of the same type are supported.
+In the request file:
+
+```yaml
+apps:
+  - name: frontend
+    type: angular
+    container_image: acr.azurecr.io/acme/frontend
+  - name: orders-api
+    type: springboot
+    container_image: acr.azurecr.io/acme/orders-api
+  - name: inventory-api    # second instance of the same type — fully supported
+    type: springboot
+    container_image: acr.azurecr.io/acme/inventory-api
+```
+
+Supported types: `angular`, `react`, `springboot`, `go`, `python`, `dotnet`.
+
+After `copier copy` or `copier update`, the `_generate.py` task creates the full
+`apps/{name}/build-repo/`, `apps/{name}/config-repo/`, and `apps/{name}/argocd-app/`
+tree for each app, then self-deletes. Existing files are never overwritten, so
+hand-edits survive `copier update`.
+
+Each app produces three discrete ADO repos: `{name}` (build), `{name}-k8s-manifests`
+(Kustomize config), and `{name}-argocd` (ArgoCD Application + sync pipeline).
+
 ## Common gotchas
 
 - **Reference the template by its real Git URL**, not a relative path, once
@@ -119,4 +150,4 @@ script does not yet handle.
   empty file. To make a file or directory not exist at all when a
   component is skipped, use `_exclude` in `copier.yml` with a templated
   entry, as done for `app-gateway`, `build-repo`, `config-repo`, and
-  `argocd-app` in this template.
+  `app-gateway` in this template.

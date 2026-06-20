@@ -9,15 +9,26 @@ environments:
   - staging
   - prod
 
-include_app_gateway: true
-include_build_repo: true
-include_config_repo: true
-include_argocd_app: true
+# Each app gets three discrete ADO repos:
+#   {name}               — build repo (Dockerfile + build pipeline)
+#   {name}-k8s-manifests — Kustomize config repo (manifests + pipeline)
+#   {name}-argocd        — ArgoCD Application + sync pipeline
+# Supported types: angular, react, springboot, go, python, dotnet
+apps:
+  - name: frontend
+    type: angular
+    container_image: acr.azurecr.io/acme/frontend
+  - name: orders-api
+    type: springboot
+    container_image: acr.azurecr.io/acme/orders-api
+  - name: inventory-api
+    type: springboot
+    container_image: acr.azurecr.io/acme/inventory-api
 
-container_image: acr.azurecr.io/acme/orders-api
-runtime: java
 key_vault_name: kv-acme-prod
+argocd_target_revision: main
+
+include_app_gateway: true
 app_gateway_backend_fqdn: acme-internal.svc.cluster.local
 app_gateway_hostname: acme.platform.example.com
 app_gateway_priority: 100
-argocd_target_revision: main

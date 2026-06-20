@@ -26,8 +26,18 @@ include_build_repo: true
 include_config_repo: true
 include_argocd_app: true
 
+apps:
+  - name: frontend
+    type: angular
+    container_image: acr.azurecr.io/acme/frontend
+  - name: orders-api
+    type: springboot
+    container_image: acr.azurecr.io/acme/orders-api
+  - name: inventory-api
+    type: springboot
+    container_image: acr.azurecr.io/acme/inventory-api
+
 container_image: acr.azurecr.io/acme/orders-api
-runtime: java
 key_vault_name: kv-acme-prod
 app_gateway_backend_fqdn: acme-internal.svc.cluster.local
 app_gateway_hostname: acme.platform.example.com

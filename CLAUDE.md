@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo does
 
-A proof-of-concept for automating tenant onboarding on a GitOps platform. An operator writes a YAML request file describing a tenant; Copier renders it into four component directories (App Gateway Terraform, container build repo, Kustomize config repo, ArgoCD Application); `provision_tenant.py` then drives the Azure DevOps REST API to create repos, push content, and register pipelines for only the components not already live.
+A proof-of-concept for automating tenant onboarding on a GitOps platform. An operator writes a YAML request file describing a tenant; Copier renders it into component directories and a `_generate.py` script; that script creates per-app discrete repo trees under `apps/`; `provision_tenant.py` then drives the Azure DevOps REST API to create repos, push content, and register pipelines for only the components not already live.
 
 ## Setup
 
@@ -41,28 +41,42 @@ uv run python provision_tenant.py \
 
 ## Architecture
 
+### Per-app discrete repo model
+
+Each app in the `apps` list gets **three discrete ADO repos**:
+
+| Repo name | Content | Source dir in tenant |
+|-----------|---------|----------------------|
+| `{name}` | Dockerfile + build pipeline | `apps/{name}/build-repo/` |
+| `{name}-k8s-manifests` | Kustomize base + overlays + pipeline | `apps/{name}/config-repo/` |
+| `{name}-argocd` | ArgoCD Application CRD + sync pipeline | `apps/{name}/argocd-app/` |
+
+The app-gateway Terraform remains a single shared component (`{tenant_slug}-app-gateway`) when `include_app_gateway: true`.
+
 ### End-to-end flow
 
 1. Operator writes a request YAML (committed and PR-reviewed)
-2. `copier copy` renders component directories + `provisioning.yaml` from `onboarding-template/`
-3. `provision_tenant.py` reads `provisioning.yaml` + request file, provisions only the delta (components in `push_order` not yet in `provisioned_components`), then writes newly-provisioned components back into the request file
-4. ADO pipelines run; apply/sync stages are gated behind human approval
+2. `copier copy` renders `provisioning.yaml` + `_generate.py` from `onboarding-template/`
+3. Copier's `_tasks` runs `python3 _generate.py && rm _generate.py`, which creates the full per-app directory tree under `apps/`
+4. `provision_tenant.py` reads `provisioning.yaml` + request file, provisions only the delta (components in `push_order` not yet in `provisioned_components`), then writes newly-provisioned components back into the request file
+5. ADO pipelines run; ArgoCD sync stages are gated behind human approval per app
 
 ### Template structure (`onboarding-template/`)
 
-- `copier.yml` — defines all questions; four boolean `include_*` toggles drive `_exclude` entries that entirely omit component directories when false. Component-specific follow-up questions use `when:` so they're never asked if the component is excluded. Core identity questions: `tenant_slug` (validated against `^[a-z][a-z0-9-]{1,28}$`), `ado_project`, `ado_org_name`, `resource_tier`, `environments`. Notable conditional questions: `runtime` (java/python/go/node, when `include_build_repo`), `app_gateway_priority` (unique per shared gateway, when `include_app_gateway`).
-- `{{tenant_slug}}/` directory naming — Copier resolves the variable in directory names at render time
-- `provisioning.yaml.jinja` — rendered alongside components; maps each included component to its ADO repo name, pipeline YAML path, and approval environments. Guaranteed to stay in sync with the file tree because both come from the same render pass.
+- `copier.yml` — defines all questions. Core identity: `tenant_slug` (validated `^[a-z][a-z0-9-]{1,28}$`), `ado_project`, `ado_org_name`, `resource_tier`, `environments`. App list: `apps` (type: yaml, list of `{name, type, container_image}`; supported types: angular, react, springboot, go, python, dotnet). Tenant-wide settings: `key_vault_name`, `argocd_target_revision`. Optional: `include_app_gateway` toggle + `app_gateway_*` follow-up questions. No `include_build_repo / include_config_repo / include_argocd_app` flags — these are always generated for every app.
+- `_generate.py.jinja` — Copier renders this file with tenant-level Jinja2 variables baked in (`tenant_slug`, `apps | tojson`, `environments | tojson`, etc.), then the `_tasks` entry runs it to create the full `apps/{name}/{build-repo,config-repo,argocd-app}/` tree. Dockerfiles and all other files are only written if they don't already exist (safe for `copier update`). Self-deletes after running.
+- `provisioning.yaml.jinja` — loops over `apps` to generate one `{name}_build`, `{name}_config`, `{name}_argocd` component entry per app, plus `app_gateway` if enabled. The `push_order` list follows the same pattern. Guaranteed in sync with `_generate.py`'s output because both come from the same `apps` list.
+- `app-gateway/` — Terraform for Application Gateway listener (excluded when `include_app_gateway: false`).
 
 ### Phased / iterative onboarding
 
-The request file carries a `provisioned_components` list (ignored by Copier, read only by `provision_tenant.py`). To add a component later: flip its `include_*` to `true` in the request file, run `copier update` (not `copier copy`), then re-run `provision_tenant.py`. Only the new delta gets provisioned. The script writes successful components back into `provisioned_components` using `ruamel.yaml` round-trip mode to preserve comments and key order (the request file is the audit trail).
+The request file carries a `provisioned_components` list (ignored by Copier, read only by `provision_tenant.py`). To add a new app later: add it to the `apps` list in the request file, run `copier update` (not `copier copy`), then re-run `provision_tenant.py`. Only the new delta gets provisioned. The script writes successful components back into `provisioned_components` using `ruamel.yaml` round-trip mode to preserve comments and key order (the request file is the audit trail).
 
 ### `provision_tenant.py` internals
 
 - `compute_delta()` — diffs `push_order` in `provisioning.yaml` against `provisioned_components` in request file
 - `create_repo()` / `push_directory()` — uses `azure-devops` SDK typed clients; idempotent (409 → fetch existing)
-- `create_pipeline()` — posts directly to ADO REST API via `requests` (not SDK) because the SDK's `CreatePipelineConfigurationParameters` doesn't expose typed `path`/`repository` fields
+- `create_pipeline()` — posts directly to ADO REST API via `requests` (not SDK) because the SDK's `CreatePipelineConfigurationParameters` doesn't expose typed `path`/`repository` fields; uses `?name=` server-side filter for idempotent lookup
 - `ensure_environment()` — creates ADO environments; approval checks must still be wired separately (Checks API not yet in Python SDK)
 - `write_back_provisioned()` — uses `ruamel.yaml` to rewrite the request file preserving comments
 
@@ -79,3 +93,4 @@ The request file carries a `provisioned_components` list (ignored by Copier, rea
 - Template must be referenced by absolute Git URL for `copier update` to resolve it reliably across machines
 - `--data-file` values are typed per `copier.yml` question definitions; `--data` CLI flags override them
 - The template directory must be a Git repo (`git init && git commit`) for `copier update` to work
+- `_envops: trim_blocks: true, lstrip_blocks: true` is set globally; avoid Jinja2 block tags (`{% %}`) in Python task scripts to prevent whitespace stripping surprises

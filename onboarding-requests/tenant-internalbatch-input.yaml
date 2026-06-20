@@ -7,12 +7,12 @@ environments:
   - dev
   - prod
 
-include_app_gateway: false
-include_build_repo: true
-include_config_repo: true
-include_argocd_app: true
+apps:
+  - name: batch-worker
+    type: python
+    container_image: acr.azurecr.io/internalbatch/worker
 
-container_image: acr.azurecr.io/internalbatch/worker
-runtime: java
 key_vault_name: kv-internalbatch-prod
 argocd_target_revision: main
+
+include_app_gateway: false

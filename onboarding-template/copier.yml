@@ -44,52 +44,43 @@ environments:
     - prod
 
 # ============================================================
-# Component selection — operator decides what this tenant needs.
-# This is the actual onboarding-requirements structuring step.
+# Application list — each app gets its own discrete pair of repos:
+#   {name}               → build repo (Dockerfile + build pipeline)
+#   {name}-k8s-manifests → Kustomize config repo (manifests + pipeline)
+#   {name}-argocd        → ArgoCD Application + sync pipeline
+# Multiple apps and multiple instances of the same type are supported.
+# Supported types: angular, react, springboot, go, python, dotnet
+# ============================================================
+apps:
+  type: yaml
+  help: >-
+    Applications in this tenant. Each entry requires:
+    name (unique lowercase slug), type (angular|react|springboot|go|python|dotnet),
+    container_image (full registry path without tag).
+  default: |
+    - name: app
+      type: springboot
+      container_image: acr.azurecr.io/your-org/app-name
+
+# ============================================================
+# Config and ArgoCD settings — apply to all apps in this tenant
+# ============================================================
+key_vault_name:
+  type: str
+  help: Azure Key Vault name backing this tenant's ExternalSecret
+
+argocd_target_revision:
+  type: str
+  help: Git revision (branch/tag) ArgoCD should track for this tenant
+  default: main
+
+# ============================================================
+# App Gateway — optional dedicated listener on the shared gateway
 # ============================================================
 include_app_gateway:
   type: bool
   help: Does this tenant need a dedicated Azure Application Gateway listener?
   default: true
-
-include_build_repo:
-  type: bool
-  help: Generate the container build repo (Dockerfile + build/push pipeline)?
-  default: true
-
-include_config_repo:
-  type: bool
-  help: Generate the Kustomize config repo (manifests + kustomize build pipeline)?
-  default: true
-
-include_argocd_app:
-  type: bool
-  help: Generate the ArgoCD Application manifest + sync pipeline?
-  default: true
-
-# ============================================================
-# Component-specific follow-up questions — only asked when relevant
-# ============================================================
-container_image:
-  type: str
-  help: Container registry path (without tag) for this tenant's image
-  when: "{{ include_build_repo or include_config_repo }}"
-
-runtime:
-  type: str
-  help: Container runtime for the build repo Dockerfile
-  choices:
-    - java
-    - python
-    - go
-    - node
-  default: java
-  when: "{{ include_build_repo }}"
-
-key_vault_name:
-  type: str
-  help: Azure Key Vault name backing this tenant's ExternalSecret
-  when: "{{ include_config_repo }}"
 
 app_gateway_backend_fqdn:
   type: str
@@ -106,21 +97,16 @@ app_gateway_priority:
   help: Routing rule priority on the shared Application Gateway (must be unique per gateway, 1–20000)
   when: "{{ include_app_gateway }}"
 
-argocd_target_revision:
-  type: str
-  help: Git revision (branch/tag) ArgoCD should track for this tenant
-  default: main
-  when: "{{ include_argocd_app }}"
+# ============================================================
+# Post-generation tasks
+# _generate.py is rendered by Copier into the output directory,
+# run to scaffold per-app discrete repos under apps/, then deleted.
+# ============================================================
+_tasks:
+  - "python3 _generate.py && rm _generate.py"
 
 # ============================================================
-# File/dir exclusion — the mechanism that makes components optional.
-# Each entry is templated; an empty render means "don't exclude".
+# File/dir exclusion
 # ============================================================
 _exclude:
   - "{% if not include_app_gateway %}app-gateway{% endif %}"
-  - "{% if not include_build_repo %}build-repo{% endif %}"
-  - "{% if not include_config_repo %}config-repo{% endif %}"
-  - "{% if not include_argocd_app %}argocd-app{% endif %}"
-  - "{% if include_config_repo and 'staging' not in environments %}config-repo/{{ tenant_slug }}/overlays/staging{% endif %}"
-  - "{% if include_config_repo and 'prod' not in environments %}config-repo/{{ tenant_slug }}/overlays/prod{% endif %}"
-  - "{% if include_config_repo and 'dev' not in environments %}config-repo/{{ tenant_slug }}/overlays/dev{% endif %}"
