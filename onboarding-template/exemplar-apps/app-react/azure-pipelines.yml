@@ -1,0 +1,57 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  # Override CONTAINER_IMAGE in Pipeline Settings → Variables, or reference a
+  # variable group that contains it.
+  CONTAINER_IMAGE: 'REPLACE_WITH_YOUR_REGISTRY_AND_IMAGE'
+  NODE_VERSION: '20.x'
+
+resources:
+  repositories:
+    - repository: pipelineTemplates
+      type: git
+      name: platform-pipeline-templates
+      ref: main
+
+stages:
+  - stage: Test
+    displayName: 'Unit Test'
+    jobs:
+      - job: VitestRun
+        displayName: 'vitest + coverage'
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: NodeTool@0
+            displayName: 'Use Node.js $(NODE_VERSION)'
+            inputs:
+              versionSpec: $(NODE_VERSION)
+
+          - script: npm ci
+            displayName: 'npm ci'
+
+          - script: |
+              mkdir -p test-results coverage
+              npm test
+            displayName: 'vitest run with coverage'
+
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: 'test-results/junit.xml'
+              testRunTitle: 'React Unit Tests'
+
+          - task: PublishCodeCoverageResults@2
+            condition: always()
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: 'coverage/cobertura-coverage.xml'
+
+  - template: stages/build.yml@pipelineTemplates
+    parameters:
+      containerImage: $(CONTAINER_IMAGE)
+      dependsOn: [Test]

@@ -1,0 +1,91 @@
+# Step template: promote-overlay.yml
+# Checks out the config repo, reads the image-meta artifact published by the build pipeline,
+# updates the Kustomize overlay for the target environment, validates the manifests,
+# commits the change to a feature branch, and opens a PR with auto-complete enabled.
+#
+# Prerequisites (must be set up before this template runs):
+#   - checkout: self with persistCredentials: true  (handled inside this template)
+#   - The 'image-meta' artifact must be downloadable from buildPipelineAlias
+#
+# ADO predefined variables used directly (always available — not parameterised):
+#   $(Pipeline.Workspace), $(System.TeamFoundationCollectionUri), $(System.TeamProject),
+#   $(Build.Repository.ID), $(Build.RequestedForId)
+# $(System.AccessToken) is injected as SYSTEM_TOKEN env var (masked in logs).
+
+parameters:
+  - name: appName
+    type: string
+    displayName: 'Application name — matches the directory under apps/ in the config repo'
+
+  - name: tenantSlug
+    type: string
+    displayName: 'Tenant slug (lowercase, used in commit messages and PR metadata)'
+
+  - name: env
+    type: string
+    displayName: 'Target environment overlay name (e.g. dev, nonprod, prod)'
+
+  - name: containerImage
+    type: string
+    displayName: 'Container image path without tag — used in commit messages; actual tag comes from image-meta'
+
+  - name: buildPipelineAlias
+    type: string
+    default: BuildPipeline
+    displayName: 'Pipeline resource alias declared under resources.pipelines in the calling pipeline'
+
+steps:
+  - checkout: self
+    persistCredentials: true
+
+  - download: none
+
+  - download: ${{ parameters.buildPipelineAlias }}
+    artifact: image-meta
+
+  - script: |
+      set -euo pipefail
+
+      META="$(Pipeline.Workspace)/${{ parameters.buildPipelineAlias }}/image-meta/image-meta.json"
+      CONTAINER_IMAGE=$(jq -r .containerImage "$META")
+      IMAGE_TAG=$(jq -r .imageTag "$META")
+      IMAGE_SHA=$(jq -r .imageSha "$META")
+      SOURCE_URL=$(jq -r .buildUrl "$META")
+
+      git config user.email "ado-pipeline@${{ parameters.tenantSlug }}.internal"
+      git config user.name "ADO Promotion Pipeline"
+
+      BRANCH="promote/${{ parameters.env }}-$IMAGE_TAG"
+      git checkout -b "$BRANCH"
+
+      PROMOTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      printf 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: ${{ parameters.appName }}\n  annotations:\n    platform.io/image-sha: "%s"\n    platform.io/image-tag: "%s"\n    platform.io/promoted-at: "%s"\n    platform.io/source-pipeline: "%s"\n' \
+        "$IMAGE_SHA" "$IMAGE_TAG" "$PROMOTED_AT" "$SOURCE_URL" \
+        > ${{ parameters.appName }}/overlays/${{ parameters.env }}/annotation-patch.yaml
+
+      cd ${{ parameters.appName }}/overlays/${{ parameters.env }}
+      kustomize edit set image ${{ parameters.containerImage }}:$IMAGE_TAG
+      kustomize build . > /tmp/${{ parameters.env }}-rendered.yaml
+      echo "Manifest validation passed for ${{ parameters.env }}"
+      cd -
+
+      git add -A
+      git commit -m "chore(${{ parameters.env }}): promote ${{ parameters.containerImage }}:$IMAGE_TAG"
+      git push origin "$BRANCH"
+
+      PR_JSON=$(jq -n \
+        --arg title "[${{ upper(parameters.env) }}] Promote ${{ parameters.appName }} to $IMAGE_TAG" \
+        --arg desc "**Env:** ${{ parameters.env }} | **Image:** ${{ parameters.containerImage }}:$IMAGE_TAG | **SHA:** $IMAGE_SHA | **Source:** $SOURCE_URL" \
+        --arg src "refs/heads/promote/${{ parameters.env }}-$IMAGE_TAG" \
+        --arg rid "$(Build.RequestedForId)" \
+        '{title: $title, description: $desc, sourceRefName: $src, targetRefName: "refs/heads/main", autoCompleteSetBy: {id: $rid}, completionOptions: {mergeStrategy: "squash", deleteSourceBranch: true}}')
+
+      curl -sfX POST \
+        "$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_apis/git/repositories/$(Build.Repository.ID)/pullrequests?api-version=7.1" \
+        -H "Authorization: Bearer $SYSTEM_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "$PR_JSON"
+      echo "PR created (auto-complete enabled) for ${{ upper(parameters.env) }}"
+    displayName: 'Promote ${{ parameters.containerImage }} to ${{ upper(parameters.env) }}'
+    env:
+      SYSTEM_TOKEN: $(System.AccessToken)

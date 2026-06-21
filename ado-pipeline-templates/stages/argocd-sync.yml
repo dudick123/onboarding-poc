@@ -1,0 +1,68 @@
+# Stage template: argocd-sync.yml
+# Manual ArgoCD sync stage — escape hatch for when the config promotion pipeline
+# cannot be used. Each call generates one environment sync stage.
+#
+# The config-repo promotion pipeline (stages/promote.yml) is the PRIMARY sync driver.
+# Use this pipeline only for out-of-band or recovery scenarios.
+#
+# Usage (called once per environment):
+#
+#   - template: stages/argocd-sync.yml@pipelineTemplates
+#     parameters:
+#       env: prod
+#       appName: frontend
+#       tenantSlug: acme
+#       argocdAppName: acme-frontend
+#       argocdServer: $(ARGOCD_SERVER_PROD)
+#       argocdToken: $(ARGOCD_TOKEN_PROD)
+#       dependsOn: [SyncNONPROD]
+
+parameters:
+  - name: env
+    type: string
+    displayName: 'Environment name (e.g. dev, nonprod, prod) — used in stage name and approval environment'
+
+  - name: appName
+    type: string
+    displayName: 'Application name'
+
+  - name: tenantSlug
+    type: string
+    displayName: 'Tenant slug'
+
+  - name: argocdAppName
+    type: string
+    displayName: 'ArgoCD application name (e.g. acme-frontend)'
+
+  - name: argocdServer
+    type: string
+    displayName: 'ArgoCD server URL for this environment'
+
+  - name: argocdToken
+    type: string
+    displayName: 'ArgoCD API token for this environment'
+
+  - name: dependsOn
+    type: object
+    default: []
+    displayName: 'Stage(s) this sync stage depends on'
+
+stages:
+  - stage: Sync${{ upper(parameters.env) }}
+    displayName: 'Sync ${{ upper(parameters.env) }} (manual escape hatch)'
+    dependsOn: ${{ parameters.dependsOn }}
+    jobs:
+      - deployment: ArgoCDSync${{ upper(parameters.env) }}
+        displayName: 'ArgoCD sync ${{ parameters.argocdAppName }} on ${{ upper(parameters.env) }}'
+        environment: argocd-sync-${{ parameters.tenantSlug }}-${{ parameters.appName }}-${{ parameters.env }}-approval
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - template: ../steps/argocd-sync.yml
+                  parameters:
+                    argocdAppName: ${{ parameters.argocdAppName }}
+                    argocdServer: ${{ parameters.argocdServer }}
+                    argocdToken: ${{ parameters.argocdToken }}

@@ -1,0 +1,67 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  # Override CONTAINER_IMAGE in Pipeline Settings → Variables, or reference a
+  # variable group that contains it.
+  CONTAINER_IMAGE: 'REPLACE_WITH_YOUR_REGISTRY_AND_IMAGE'
+  GO_VERSION: '1.22'
+
+resources:
+  repositories:
+    - repository: pipelineTemplates
+      type: git
+      name: platform-pipeline-templates
+      ref: main
+
+stages:
+  - stage: Test
+    displayName: 'Unit Test'
+    jobs:
+      - job: GoTest
+        displayName: 'go test + coverage'
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: GoTool@0
+            displayName: 'Use Go $(GO_VERSION)'
+            inputs:
+              version: $(GO_VERSION)
+
+          - script: |
+              go install gotest.tools/gotestsum@latest
+            displayName: 'Install gotestsum (JUnit reporter)'
+
+          - script: |
+              mkdir -p test-results coverage
+              "$(go env GOPATH)/bin/gotestsum" \
+                --junitfile test-results/junit.xml \
+                -- -coverprofile=coverage/coverage.out -covermode=atomic ./...
+            displayName: 'Run tests with JUnit output'
+
+          - script: |
+              go tool cover -func=coverage/coverage.out
+              go install github.com/boumenot/gocover-cobertura@latest
+              "$(go env GOPATH)/bin/gocover-cobertura" \
+                < coverage/coverage.out > coverage/cobertura.xml
+            displayName: 'Convert coverage to Cobertura'
+
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: 'test-results/junit.xml'
+              testRunTitle: 'Go Unit Tests'
+
+          - task: PublishCodeCoverageResults@2
+            condition: always()
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: 'coverage/cobertura.xml'
+
+  - template: stages/build.yml@pipelineTemplates
+    parameters:
+      containerImage: $(CONTAINER_IMAGE)
+      dependsOn: [Test]

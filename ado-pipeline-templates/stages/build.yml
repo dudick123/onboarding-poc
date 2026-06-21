@@ -1,0 +1,60 @@
+# Stage template: build.yml
+# Docker Build & Push stage — builds the image, captures the digest, and publishes
+# the 'image-meta' pipeline artifact consumed by the config-repo promotion pipeline.
+#
+# Usage in a build pipeline:
+#
+#   resources:
+#     repositories:
+#       - repository: pipelineTemplates
+#         type: git
+#         name: platform-pipeline-templates
+#         ref: main
+#
+#   stages:
+#     - stage: Test
+#       ...
+#     - template: stages/build.yml@pipelineTemplates
+#       parameters:
+#         containerImage: $(CONTAINER_IMAGE)
+#         dependsOn: [Test]
+
+parameters:
+  - name: containerImage
+    type: string
+    displayName: 'Full image repository path without tag (e.g. acr.azurecr.io/org/app)'
+
+  - name: dependsOn
+    type: object
+    default: []
+    displayName: 'Stage(s) this build stage depends on (e.g. [Test])'
+
+  - name: dockerfile
+    type: string
+    default: Dockerfile
+    displayName: 'Path to Dockerfile relative to build context'
+
+  - name: buildContext
+    type: string
+    default: .
+    displayName: 'Docker build context directory'
+
+stages:
+  - stage: Build
+    displayName: 'Docker Build & Push'
+    dependsOn: ${{ parameters.dependsOn }}
+    jobs:
+      - job: DockerBuildPush
+        displayName: 'Build, push, capture SHA, publish image-meta'
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - template: ../steps/docker-build-push.yml
+            parameters:
+              containerImage: ${{ parameters.containerImage }}
+              dockerfile: ${{ parameters.dockerfile }}
+              buildContext: ${{ parameters.buildContext }}
+
+          - template: ../steps/capture-and-publish-image-meta.yml
+            parameters:
+              containerImage: ${{ parameters.containerImage }}

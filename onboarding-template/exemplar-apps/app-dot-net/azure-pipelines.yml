@@ -1,0 +1,58 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  # Override CONTAINER_IMAGE in Pipeline Settings → Variables, or reference a
+  # variable group that contains it.
+  CONTAINER_IMAGE: 'REPLACE_WITH_YOUR_REGISTRY_AND_IMAGE'
+  DOTNET_VERSION: '8.0.x'
+
+resources:
+  repositories:
+    - repository: pipelineTemplates
+      type: git
+      name: platform-pipeline-templates
+      ref: main
+
+stages:
+  - stage: Test
+    displayName: 'Unit Test'
+    jobs:
+      - job: DotNetTest
+        displayName: 'dotnet test + coverage'
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: UseDotNet@2
+            displayName: 'Use .NET $(DOTNET_VERSION)'
+            inputs:
+              version: $(DOTNET_VERSION)
+
+          - script: |
+              mkdir -p test-results coverage
+              dotnet test tests/HelloWorld.Tests.csproj \
+                --logger "trx;LogFileName=../../test-results/results.trx" \
+                /p:CollectCoverage=true \
+                /p:CoverletOutputFormat=cobertura \
+                /p:CoverletOutput=../../coverage/cobertura.xml
+            displayName: 'dotnet test with Coverlet'
+
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: VSTest
+              testResultsFiles: 'test-results/results.trx'
+              testRunTitle: '.NET Unit Tests'
+
+          - task: PublishCodeCoverageResults@2
+            condition: always()
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: 'coverage/cobertura.xml'
+
+  - template: stages/build.yml@pipelineTemplates
+    parameters:
+      containerImage: $(CONTAINER_IMAGE)
+      dependsOn: [Test]

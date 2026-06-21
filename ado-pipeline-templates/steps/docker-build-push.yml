@@ -1,0 +1,29 @@
+# Step template: docker-build-push.yml
+# Builds and pushes a Docker image. Tagged with $(Build.BuildId).
+# ADO predefined variables used directly: $(Build.BuildId)
+# All business-specific values are explicit parameters.
+
+parameters:
+  - name: containerImage
+    type: string
+    displayName: 'Full image repository path (without tag)'
+
+  - name: dockerfile
+    type: string
+    default: Dockerfile
+    displayName: 'Path to Dockerfile (relative to build context)'
+
+  - name: buildContext
+    type: string
+    default: .
+    displayName: 'Docker build context directory'
+
+steps:
+  - task: Docker@2
+    displayName: 'Build and push ${{ parameters.containerImage }}:$(Build.BuildId)'
+    inputs:
+      command: buildAndPush
+      repository: ${{ parameters.containerImage }}
+      dockerfile: ${{ parameters.dockerfile }}
+      buildContext: ${{ parameters.buildContext }}
+      tags: $(Build.BuildId)

@@ -1,0 +1,29 @@
+# Step template: argocd-sync.yml
+# Runs `argocd app sync` against the named application on a specific control plane.
+# argocdServer and argocdToken are passed as parameters (caller resolves them from
+# the 'argocd-servers' variable group, e.g. $(ARGOCD_SERVER_NONPROD)).
+# The token is injected via env: so it is masked in pipeline logs.
+
+parameters:
+  - name: argocdAppName
+    type: string
+    displayName: 'ArgoCD application name (e.g. acme-frontend)'
+
+  - name: argocdServer
+    type: string
+    displayName: 'ArgoCD server FQDN (e.g. https://argocd-nonprod.example.com)'
+
+  - name: argocdToken
+    type: string
+    displayName: 'ArgoCD API token (pass via variable group secret, e.g. $(ARGOCD_TOKEN_NONPROD))'
+
+steps:
+  - script: |
+      set -euo pipefail
+      argocd app sync ${{ parameters.argocdAppName }} \
+        --server ${{ parameters.argocdServer }} \
+        --auth-token "$ARGOCD_TOKEN" \
+        --prune
+    displayName: 'ArgoCD sync ${{ parameters.argocdAppName }} on ${{ parameters.argocdServer }}'
+    env:
+      ARGOCD_TOKEN: ${{ parameters.argocdToken }}

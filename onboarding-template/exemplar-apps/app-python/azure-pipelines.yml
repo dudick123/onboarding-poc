@@ -1,0 +1,65 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  # Override CONTAINER_IMAGE in Pipeline Settings → Variables, or reference a
+  # variable group that contains it.
+  CONTAINER_IMAGE: 'REPLACE_WITH_YOUR_REGISTRY_AND_IMAGE'
+  PYTHON_VERSION: '3.12'
+
+resources:
+  repositories:
+    - repository: pipelineTemplates
+      type: git
+      name: platform-pipeline-templates
+      ref: main
+
+stages:
+  - stage: Test
+    displayName: 'Unit Test'
+    jobs:
+      - job: PytestRun
+        displayName: 'pytest + coverage'
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: UsePythonVersion@0
+            displayName: 'Use Python $(PYTHON_VERSION)'
+            inputs:
+              versionSpec: $(PYTHON_VERSION)
+
+          - script: pip install uv
+            displayName: 'Install uv'
+
+          - script: uv sync --dev
+            displayName: 'Install dependencies (including dev)'
+
+          - script: |
+              mkdir -p test-results coverage
+              uv run pytest tests/ \
+                --junitxml=test-results/junit.xml \
+                --cov=. \
+                --cov-report=xml:coverage/cobertura.xml \
+                --cov-report=term-missing \
+                --cov-omit="tests/*"
+            displayName: 'pytest with coverage'
+
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: 'test-results/junit.xml'
+              testRunTitle: 'Python Unit Tests'
+
+          - task: PublishCodeCoverageResults@2
+            condition: always()
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: 'coverage/cobertura.xml'
+
+  - template: stages/build.yml@pipelineTemplates
+    parameters:
+      containerImage: $(CONTAINER_IMAGE)
+      dependsOn: [Test]

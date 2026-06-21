@@ -1,0 +1,37 @@
+# Step template: capture-and-publish-image-meta.yml
+# Captures the image digest from the local Docker daemon after a push,
+# writes image-meta.json, and publishes it as a pipeline artifact named 'image-meta'.
+#
+# The config-repo promotion pipeline consumes this artifact via pipeline resource trigger.
+#
+# ADO predefined variables used directly (always available — not parameterised):
+#   $(Build.BuildId), $(Build.SourceVersion), $(Build.ArtifactStagingDirectory),
+#   $(System.TeamFoundationCollectionUri), $(System.TeamProject)
+
+parameters:
+  - name: containerImage
+    type: string
+    displayName: 'Full image repository path (without tag) — must match the image that was just pushed'
+
+steps:
+  - script: |
+      set -euo pipefail
+      IMAGE_SHA=$(docker inspect --format '{{index .RepoDigests 0}}' \
+        ${{ parameters.containerImage }}:$(Build.BuildId) \
+        | sed 's/.*@//')
+      BUILD_URL="$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)"
+      BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      mkdir -p $(Build.ArtifactStagingDirectory)/image-meta
+      printf '{\n  "containerImage": "%s",\n  "imageTag": "%s",\n  "imageSha": "%s",\n  "buildId": "%s",\n  "buildUrl": "%s",\n  "gitCommit": "%s",\n  "builtAt": "%s"\n}\n' \
+        "${{ parameters.containerImage }}" "$(Build.BuildId)" "$IMAGE_SHA" \
+        "$(Build.BuildId)" "$BUILD_URL" "$(Build.SourceVersion)" "$BUILT_AT" \
+        > $(Build.ArtifactStagingDirectory)/image-meta/image-meta.json
+      echo "--- image-meta.json ---"
+      cat $(Build.ArtifactStagingDirectory)/image-meta/image-meta.json
+    displayName: 'Capture image SHA and write image-meta.json'
+
+  - task: PublishPipelineArtifact@1
+    displayName: 'Publish image-meta artifact'
+    inputs:
+      targetPath: $(Build.ArtifactStagingDirectory)/image-meta
+      artifact: image-meta

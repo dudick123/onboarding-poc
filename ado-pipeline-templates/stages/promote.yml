@@ -1,0 +1,122 @@
+# Stage template: promote.yml
+# One environment promotion stage for a config repo.
+# Triggered by the 'image-meta' artifact published by the build pipeline.
+#
+# When isFirstEnv=true  → regular job, no gate, ArgoCD auto-syncs from the repo.
+# When isFirstEnv=false → deployment job gated by an ADO environment approval check;
+#                         after approval the overlay PR is auto-completed and ArgoCD is synced.
+#
+# Caller must declare a pipeline resource alias matching buildPipelineAlias and a
+# variable group 'argocd-servers' providing ARGOCD_SERVER_* / ARGOCD_TOKEN_* per env.
+#
+# Usage (called once per environment):
+#
+#   - template: stages/promote.yml@pipelineTemplates
+#     parameters:
+#       env: dev
+#       appName: frontend
+#       tenantSlug: acme
+#       containerImage: acr.azurecr.io/acme/frontend
+#       isFirstEnv: true
+#       dependsOn: []
+#
+#   - template: stages/promote.yml@pipelineTemplates
+#     parameters:
+#       env: prod
+#       appName: frontend
+#       tenantSlug: acme
+#       containerImage: acr.azurecr.io/acme/frontend
+#       isFirstEnv: false
+#       dependsOn: [PromoteNONPROD]
+#       argocdServer: $(ARGOCD_SERVER_PROD)
+#       argocdToken: $(ARGOCD_TOKEN_PROD)
+
+parameters:
+  - name: env
+    type: string
+    displayName: 'Target environment overlay name (e.g. dev, nonprod, prod)'
+
+  - name: appName
+    type: string
+    displayName: 'Application name'
+
+  - name: tenantSlug
+    type: string
+    displayName: 'Tenant slug'
+
+  - name: containerImage
+    type: string
+    displayName: 'Container image path without tag — used in commit messages'
+
+  - name: isFirstEnv
+    type: boolean
+    default: false
+    displayName: 'True for the first environment (no gate, ArgoCD auto-sync). False for gated envs.'
+
+  - name: dependsOn
+    type: object
+    default: []
+    displayName: 'Stage(s) this promote stage depends on'
+
+  - name: buildPipelineAlias
+    type: string
+    default: BuildPipeline
+    displayName: 'Pipeline resource alias for the build pipeline (must match resources.pipelines entry)'
+
+  - name: argocdAppName
+    type: string
+    default: ''
+    displayName: 'ArgoCD application name (defaults to tenantSlug-appName if empty)'
+
+  - name: argocdServer
+    type: string
+    default: ''
+    displayName: 'ArgoCD server URL for this environment — required when isFirstEnv=false'
+
+  - name: argocdToken
+    type: string
+    default: ''
+    displayName: 'ArgoCD API token for this environment — required when isFirstEnv=false'
+
+stages:
+  - stage: Promote${{ upper(parameters.env) }}
+    displayName: 'Promote to ${{ upper(parameters.env) }}'
+    dependsOn: ${{ parameters.dependsOn }}
+    jobs:
+      - ${{ if parameters.isFirstEnv }}:
+        - job: Promote${{ upper(parameters.env) }}
+          displayName: 'Update ${{ parameters.env }} overlay → PR auto-complete → ArgoCD auto-sync'
+          pool:
+            vmImage: ubuntu-latest
+          steps:
+            - template: ../steps/promote-overlay.yml
+              parameters:
+                appName: ${{ parameters.appName }}
+                tenantSlug: ${{ parameters.tenantSlug }}
+                env: ${{ parameters.env }}
+                containerImage: ${{ parameters.containerImage }}
+                buildPipelineAlias: ${{ parameters.buildPipelineAlias }}
+
+      - ${{ if not(parameters.isFirstEnv) }}:
+        - deployment: Promote${{ upper(parameters.env) }}
+          displayName: 'Promote to ${{ upper(parameters.env) }} (requires ADO environment approval)'
+          environment: config-promote-${{ parameters.tenantSlug }}-${{ parameters.appName }}-${{ parameters.env }}-approval
+          pool:
+            vmImage: ubuntu-latest
+          strategy:
+            runOnce:
+              deploy:
+                steps:
+                  - template: ../steps/promote-overlay.yml
+                    parameters:
+                      appName: ${{ parameters.appName }}
+                      tenantSlug: ${{ parameters.tenantSlug }}
+                      env: ${{ parameters.env }}
+                      containerImage: ${{ parameters.containerImage }}
+                      buildPipelineAlias: ${{ parameters.buildPipelineAlias }}
+
+                  - template: ../steps/argocd-sync.yml
+                    parameters:
+                      argocdAppName: ${{ coalesce(parameters.argocdAppName, join('-', parameters.tenantSlug, parameters.appName)) }}
+                      argocdServer: ${{ parameters.argocdServer }}
+                      argocdToken: ${{ parameters.argocdToken }}

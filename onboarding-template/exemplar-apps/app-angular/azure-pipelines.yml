@@ -1,0 +1,60 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  # Override CONTAINER_IMAGE in Pipeline Settings → Variables, or reference a
+  # variable group that contains it.
+  CONTAINER_IMAGE: 'REPLACE_WITH_YOUR_REGISTRY_AND_IMAGE'
+  NODE_VERSION: '20.x'
+
+resources:
+  repositories:
+    - repository: pipelineTemplates
+      type: git
+      name: platform-pipeline-templates
+      ref: main
+
+stages:
+  - stage: Test
+    displayName: 'Unit Test'
+    jobs:
+      - job: NgTest
+        displayName: 'ng test (headless Chrome + coverage)'
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: NodeTool@0
+            displayName: 'Use Node.js $(NODE_VERSION)'
+            inputs:
+              versionSpec: $(NODE_VERSION)
+
+          - script: npm ci
+            displayName: 'npm ci'
+
+          - script: |
+              mkdir -p test-results coverage
+              npx ng test \
+                --watch=false \
+                --browsers=ChromeHeadless \
+                --code-coverage
+            displayName: 'ng test (headless, coverage)'
+
+          - task: PublishTestResults@2
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: 'test-results/junit.xml'
+              testRunTitle: 'Angular Unit Tests'
+
+          - task: PublishCodeCoverageResults@2
+            condition: always()
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: 'coverage/cobertura-coverage.xml'
+
+  - template: stages/build.yml@pipelineTemplates
+    parameters:
+      containerImage: $(CONTAINER_IMAGE)
+      dependsOn: [Test]

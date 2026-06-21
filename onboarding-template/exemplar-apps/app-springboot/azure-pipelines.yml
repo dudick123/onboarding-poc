@@ -1,0 +1,44 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  # Override CONTAINER_IMAGE in Pipeline Settings → Variables, or reference a
+  # variable group that contains it.
+  CONTAINER_IMAGE: 'REPLACE_WITH_YOUR_REGISTRY_AND_IMAGE'
+  JAVA_VERSION: '21'
+
+resources:
+  repositories:
+    - repository: pipelineTemplates
+      type: git
+      name: platform-pipeline-templates
+      ref: main
+
+stages:
+  - stage: Test
+    displayName: 'Unit Test'
+    jobs:
+      - job: MavenTest
+        displayName: 'mvn test + JaCoCo'
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: Maven@4
+            displayName: 'mvn test (JUnit + JaCoCo)'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              goals: 'test'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+              testRunTitle: 'Spring Boot Unit Tests'
+              codeCoverageToolOption: JaCoCo
+              javaHomeOption: JDKVersion
+              jdkVersionOption: '1.$(JAVA_VERSION)'
+              jdkArchitectureOption: x64
+
+  - template: stages/build.yml@pipelineTemplates
+    parameters:
+      containerImage: $(CONTAINER_IMAGE)
+      dependsOn: [Test]
