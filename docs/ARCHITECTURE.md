@@ -51,29 +51,26 @@ oversight: Copier doesn't need to know about Terraform or ArgoCD semantics
 at all, which keeps the template simple and keeps the approval/change-control
 process exactly where it already lives.
 
-## Why one template repo with four component subdirectories
+## Why one template repo with a post-generation task
 
-The alternative — four separate template repos, one per component — was
-considered and rejected for this POC. A single template repo means:
+The alternative — one Jinja template file per generated artifact — was
+considered and rejected. The per-app directory tree (build-repo, config-repo,
+argocd-app) is dynamic: it depends on the `apps:` list, which is operator-supplied
+at generation time. Copier cannot natively iterate a list variable to produce
+N copies of a directory. The solution is `_generate.py.jinja`: Copier renders
+this file with tenant-level variables baked in, then the `_tasks` entry runs
+it to create the full `apps/{name}/{build-repo,config-repo,argocd-app}/` tree
+and self-deletes.
 
-- One `copier.yml` holds the full question set, including the four
-  `include_*` toggles that let an operator structure which components a
-  tenant needs. Splitting into four templates would mean either asking the
-  operator to run four separate `copier copy` invocations, or building a
-  wrapper that orchestrates four template repos — more moving parts for no
-  clear benefit at this scale.
-- `provisioning.yaml` can be generated once, referencing all four
-  components consistently, rather than needing to be assembled from four
-  separate outputs.
-- A platform-wide change that touches naming conventions across components
-  (for example, renaming `repo_name` patterns) is a single-repo,
-  single-commit change.
-
-The tradeoff: the one template repo's `copier.yml` is denser (more
-questions, more `when:` clauses, more `_exclude` entries) than any single
-component would need alone. This was judged acceptable since the question
-count is still small and `when:` clauses keep irrelevant questions from
-ever being asked.
+This means:
+- One `copier.yml` holds the complete question set. `provisioning.yaml` is
+  generated from the same answer set, guaranteeing the mapping can never drift
+  from the directory structure that was actually written.
+- A platform-wide change (e.g., adding a new base Kubernetes resource) is a
+  single edit to `_generate.py.jinja`, not N edits across N template files.
+- Existing files are never overwritten by the task script (`write_if_new` /
+  `copy_exemplar_file` skip files that already exist), so `copier update` is
+  safe to run on a tenant directory containing hand-edits.
 
 ## Why a generated `provisioning.yaml` rather than a hand-maintained mapping
 
@@ -115,18 +112,21 @@ Two details worth carrying into a real implementation:
 
 ## Component selection mechanism
 
-Four boolean questions in `copier.yml` (`include_app_gateway`,
-`include_build_repo`, `include_config_repo`, `include_argocd_app`) each
-gate an `_exclude` entry that removes the corresponding top-level directory
-when the answer is `false`. Component-specific follow-up questions (for
-example, `app_gateway_backend_fqdn`) use Copier's `when:` clause so they're
-never asked if the relevant component was declined — both the question
-flow and the file output respect the same toggle.
+One boolean question in `copier.yml` controls conditional file inclusion:
+`include_app_gateway`. When `false`, an `_exclude` entry removes the
+`app-gateway/` directory entirely from the output — not as an empty directory,
+but absent. Component-specific follow-up questions (`app_gateway_backend_fqdn`,
+`app_gateway_hostname`, `app_gateway_priority`) use Copier's `when:` clause so
+they are never asked when the component is not needed.
+
+All three per-app repo types (build, config, argocd) are always generated for
+every entry in the `apps:` list — there are no `include_build_repo` /
+`include_config_repo` / `include_argocd_app` toggles. Adding or removing an
+application is done by editing the `apps:` list and re-running `copier update`.
 
 This was tested directly: a request with `include_app_gateway: false`
-produces a tenant directory with no `app-gateway/` subdirectory at all (not
-an empty one), and `provisioning.yaml`'s `components` and `push_order` keys
-both correctly omit `app_gateway`.
+produces a tenant directory with no `app-gateway/` subdirectory at all, and
+`provisioning.yaml`'s `components` and `push_order` correctly omit `app_gateway`.
 
 ## What's not built yet
 
@@ -149,11 +149,11 @@ lives today. `provision_tenant.py` never touches the cluster.
 
 **Verification against a live ADO organisation.** Everything in
 `provision_tenant.py` has been exercised against mocked ADO clients (see
-`docs/PROVISIONING.md`), and two real bugs in the assumed SDK surface were
-found and fixed this way — but it has not yet been run against a real
-org. Treat the ADO API call shapes as "should be correct based on
-documentation and SDK inspection," not "proven against production," until
-a first real dry run confirms them.
+`docs/PROVISIONING.md`), and bugs in the assumed SDK surface were found and
+fixed this way — but it has not yet been run against a real org. Treat the
+ADO API call shapes as "should be correct based on documentation and SDK
+inspection," not "proven against production," until a first real dry run
+confirms them.
 
 ## Known limitations worth carrying forward
 

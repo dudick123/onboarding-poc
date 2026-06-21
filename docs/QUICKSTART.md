@@ -69,8 +69,9 @@ find tenant-internalbatch -type f
 
 ## 4. Try the update flow
 
-Make a platform-wide change to the template — for example, add a new line
-to `onboarding-template/config-repo/{{tenant_slug}}/base/deployment.yaml.jinja`
+Make a platform-wide change to the template — for example, add a label to
+`onboarding-template/app-gateway/main.tf.jinja` or add a new annotation to
+the base deployment template in `onboarding-template/_generate.py.jinja`
 — commit it, then from inside `tenant-acme/`:
 
 ```bash
@@ -94,7 +95,8 @@ export ADO_PAT=your-personal-access-token
 uv run python provision_tenant.py \
   --tenant-dir ./tenant-acme \
   --request-file ./onboarding-requests/tenant-acme-input.yaml \
-  --ado-org https://dev.azure.com/my-org
+  --ado-org https://dev.azure.com/my-org \
+  --pat $ADO_PAT
 ```
 
 The script only provisions components not already listed in
@@ -131,9 +133,6 @@ After `copier copy` or `copier update`, the `_generate.py` task creates the full
 tree for each app, then self-deletes. Existing files are never overwritten, so
 hand-edits survive `copier update`.
 
-Each app produces three discrete ADO repos: `{name}` (build), `{name}-k8s-manifests`
-(Kustomize config), and `{name}-argocd` (ArgoCD Application + sync pipeline).
-
 ## Common gotchas
 
 - **Reference the template by its real Git URL**, not a relative path, once
@@ -149,5 +148,4 @@ Each app produces three discrete ADO repos: `{name}` (build), `{name}-k8s-manife
   excluding the file.** Wrapping content in a conditional just produces an
   empty file. To make a file or directory not exist at all when a
   component is skipped, use `_exclude` in `copier.yml` with a templated
-  entry, as done for `app-gateway`, `build-repo`, `config-repo`, and
-  `app-gateway` in this template.
+  entry, as done for `app-gateway` in this template.

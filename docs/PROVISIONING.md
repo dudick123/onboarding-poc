@@ -115,45 +115,59 @@ build repo next sprint, and so on, with each run only acting on the delta.
 | Environment (Read & Manage) | Create environments, add approval checks |
 | Graph (Read) | Resolve approver email → AAD descriptor (used by `add_approval_check.py`) |
 
-## Expected console output for a 4-component tenant
+## Expected console output
+
+A 3-app tenant (`frontend`, `orders-api`, `inventory-api`) with App Gateway
+produces 10 components across `push_order`. Abbreviated output:
 
 ```
-────────────────────────────────────────────────────
-Component: build_repo  →  repo: acme-build
-────────────────────────────────────────────────────
-  ✓ Created repo: acme-build  (https://dev.azure.com/my-org/platform-tenants/_git/acme-build)
-  ✓ Pushed 3 file(s) — commit a1b2c3d4
-  ✓ Created pipeline: acme-build-push  (id=42)
-
-────────────────────────────────────────────────────
-Component: config_repo  →  repo: acme-config
-────────────────────────────────────────────────────
-  ✓ Created repo: acme-config
-  ✓ Pushed 9 file(s) — commit e5f6a7b8
-  ✓ Created pipeline: acme-kustomize-build  (id=43)
+Components already provisioned: (none)
+Components to provision this run: ['app_gateway', 'frontend_build',
+  'frontend_config', 'frontend_argocd', 'orders_api_build', ...]
 
 ────────────────────────────────────────────────────
 Component: app_gateway  →  repo: acme-app-gateway
 ────────────────────────────────────────────────────
   ✓ Created repo: acme-app-gateway
-  ✓ Pushed 3 file(s) — commit c9d0e1f2
-  ✓ Created pipeline: acme-app-gateway-plan-apply  (id=44)
-  ✓ Created environment: app-gateway-acme-approval  (id=12)
-  ✓ Approval check added to environment (check id=88)
+  ✓ Pushed 3 file(s) — commit a1b2c3d4
+  ✓ Created pipeline: acme-app-gateway-plan-apply  (id=41)
+  ✓ Created environment: app-gateway-acme-approval  (id=10)
+  ✓ Approval check added to environment (check id=80)
 
 ────────────────────────────────────────────────────
-Component: argocd_app  →  repo: acme-argocd
+Component: frontend_build  →  repo: frontend
 ────────────────────────────────────────────────────
-  ✓ Created repo: acme-argocd
-  ✓ Pushed 2 file(s) — commit g3h4i5j6
-  ✓ Created pipeline: acme-argocd-sync  (id=45)
-  ✓ Created environment: argocd-sync-acme-approval  (id=13)
-  ✓ Approval check added to environment (check id=89)
+  ✓ Created repo: frontend
+  ✓ Pushed 4 file(s) — commit b2c3d4e5
+  ✓ Created pipeline: frontend-build-push  (id=42)
+
+────────────────────────────────────────────────────
+Component: frontend_config  →  repo: frontend-k8s-manifests
+────────────────────────────────────────────────────
+  ✓ Created repo: frontend-k8s-manifests
+  ✓ Pushed 12 file(s) — commit c3d4e5f6
+  ✓ Created pipeline: frontend-kustomize-build  (id=43)
+
+────────────────────────────────────────────────────
+Component: frontend_argocd  →  repo: frontend-argocd
+────────────────────────────────────────────────────
+  ✓ Created repo: frontend-argocd
+  ✓ Pushed 4 file(s) — commit d4e5f6a7
+  ✓ Created pipeline: frontend-argocd-sync  (id=44)
+  ✓ Created environment: argocd-sync-acme-frontend-approval  (id=11)
+  ✓ Approval check added to environment (check id=81)
+
+  ... (orders_api_build/config/argocd and inventory_api_build/config/argocd
+       follow the same pattern — 6 more component blocks) ...
 
 ════════════════════════════════════════════════════
-Provisioning complete.
+Provisioning complete. 10 component(s) provisioned.
 ════════════════════════════════════════════════════
 ```
+
+A single-app tenant without App Gateway (e.g., `tenant-internalbatch` with
+`batch-worker`) produces 3 components: `batch_worker_build`,
+`batch_worker_config`, `batch_worker_argocd`.
 
 ## Testing status — what's been verified and how
 

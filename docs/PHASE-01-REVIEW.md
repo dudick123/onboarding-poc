@@ -199,9 +199,24 @@ All 11 items below were identified during Phase 1 review and subsequently implem
 3. Replace `bases:` with `resources:` in all Kustomize overlays — fixed in templates and all generated files
 4. Add `validator:` to `tenant_slug` in `copier.yml` — enforces `^[a-z][a-z0-9-]{1,28}$`
 5. Fix overlay replica logic — each overlay now sets `{% set overlay_env = "..." %}` and uses it in the count expression
-6. Dockerfile runtime question — added `runtime` question (java/python/go/node) with per-runtime template blocks
+6. Dockerfile runtime support — implemented as 6 separate exemplar app directories (`app-angular`, `app-react`, `app-springboot`, `app-go`, `app-python`, `app-dot-net`) copied by `_generate.py.jinja` based on the app's `type` field; no `runtime` Copier question was added
 7. Address `.copier-answers.yml` persistence gap — recovery procedure documented in `docs/ITERATIVE_ONBOARDING.md`
 8. Fix `create_pipeline` pagination — now uses server-side `?name=` filter instead of fetching all pipelines
 9. Remove or warn about `--pat` CLI argument — script now prints a warning when `--pat` appears in `sys.argv`
 10. Add `.gitignore` — covers `.venv/`, `__pycache__/`, local tenant directories
 11. Update QUICKSTART.md section 5 — now documents how to run `provision_tenant.py`
+
+---
+
+## Items not addressed in Phase 2
+
+The following minor issues from Phase 1 were not included in the Phase 2 implementation and remain open:
+
+- **Issue #10 — `add_approval_check.py` user resolution pagination.** `get_user_descriptor` fetches all Graph users without pagination and linearly scans for an email match. On large organisations this is slow and may be throttled. Not yet addressed.
+- **Issue #12 — `:latest` in `base/deployment.yaml`.** The base deployment template still renders `image: {container_image}:latest`. The Kustomize overlay correctly overrides the tag at deploy time, so this has no runtime impact, but security scanners processing the base manifest will see `:latest`.
+- **Issue #14 — `provisioned_components` sorted alphabetically, not in `push_order`.** The list is written in alphabetical order rather than dependency order. Cosmetic only — set membership is all that matters at runtime.
+- **Issue #16 — `generated-tenants/` committed alongside templates.** Accepted for the POC; not to be cargo-culted into production.
+
+## Architectural note: per-app discrete repo model
+
+After Phase 2, the architecture was further refactored from a single-tenant-repo model (one `build-repo/`, one `config-repo/`, one `argocd-app/` per tenant) to a **per-app discrete repo model**: each app in the `apps:` list gets its own three ADO repos. The `include_build_repo`, `include_config_repo`, and `include_argocd_app` Copier questions were removed entirely — these three repo types are always generated for every app. The `include_app_gateway` toggle was retained as the sole conditional component. `_generate.py.jinja` replaced the per-component Jinja template file approach for all per-app content.
